@@ -170,3 +170,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 chroma_db/
+.virtual_documents/
