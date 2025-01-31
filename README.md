@@ -3,6 +3,9 @@
 ## Overview
 AI Blog Search is an Agentic RAG application designed to enhance information retrieval from AI-related blog posts. This system leverages LangChain, LangGraph, and Google's Gemini model to fetch, process, and analyze blog content, providing users with accurate and contextually relevant answers.
 
+## LangGraph Workflow
+<img src="Images/LangGraph-Workflow.png">
+
 ## Features
 - **Document Retrieval:** Uses ChromaDB as a vector database to store and retrieve blog content based on embeddings.
 - **Agentic Query Processing:** Uses an AI-powered agent to determine whether a query should be rewritten, answered, or require more retrieval.
