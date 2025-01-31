@@ -270,11 +270,11 @@ def generate_message(graph, inputs):
 
 def main():
     st.set_page_config(page_title="AI Blog Search", page_icon=":mag_right:")
-    st.header("Agentic RAG with LangGraph: AI Blog Search")
+    st.header(":blue[Agentic RAG with LangGraph:] :green[AI Blog Search]")
 
     # Sidebar for Graph Visualization
     with st.sidebar:
-        graph_image_path = "Images/graph_output.png"
+        graph_image_path = "Images/LangGraph-Workflow.png"
         st.image(graph_image_path, caption="LangGraph Workflow", use_container_width=True)
 
         gemini_api_key = st.text_input("Enter your Gemini API key:", type="password")
@@ -316,7 +316,7 @@ def main():
         ]
     }
 
-    if st.button("Submit"):
+    if st.button("Submit", type="primary"):
         if not query:
             st.warning("Please ask a question")
         
@@ -326,7 +326,7 @@ def main():
                 st.write(response)
 
     st.markdown("---")
-    st.write("Built with :blue-background[LangGraph] | :blue-background[Gemini] by [Charan](https://www.linkedin.com/in/codewithcharan/)")
+    st.write("Built with :blue-background[LangChain] | :blue-background[LangGraph] by [Charan](https://www.linkedin.com/in/codewithcharan/)")
 
 if __name__ == "__main__":
     main()
