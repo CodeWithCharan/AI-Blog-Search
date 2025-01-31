@@ -6,6 +6,9 @@ AI Blog Search is an Agentic RAG application designed to enhance information ret
 ## LangGraph Workflow
 <img src="Images/LangGraph-Workflow.png">
 
+## Demo
+https://github.com/user-attachments/assets/c0e4e409-7653-45a0-9dc9-c30a2c07758b
+
 ## Features
 - **Document Retrieval:** Uses ChromaDB as a vector database to store and retrieve blog content based on embeddings.
 - **Agentic Query Processing:** Uses an AI-powered agent to determine whether a query should be rewritten, answered, or require more retrieval.
