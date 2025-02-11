@@ -7,10 +7,10 @@ AI Blog Search is an Agentic RAG application designed to enhance information ret
 <img src="Images/LangGraph-Workflow.png">
 
 ## Demo
-https://github.com/user-attachments/assets/c0e4e409-7653-45a0-9dc9-c30a2c07758b
+https://github.com/user-attachments/assets/cee07380-d3dc-45f4-ad26-7d944ba9c32b
 
 ## Features
-- **Document Retrieval:** Uses ChromaDB as a vector database to store and retrieve blog content based on embeddings.
+- **Document Retrieval:** Uses Qdrant as a vector database to store and retrieve blog content based on embeddings.
 - **Agentic Query Processing:** Uses an AI-powered agent to determine whether a query should be rewritten, answered, or require more retrieval.
 - **Relevance Assessment:** Implements an automated relevance grading system using Google's Gemini model.
 - **Query Refinement:** Enhances poorly structured queries for better retrieval results.
@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/c0e4e409-7653-45a0-9dc9-c30a2c07758b
 ## Technologies Used
 - **Programming Language**: [Python 3.10+](https://www.python.org/downloads/release/python-31011/)
 - **Framework**: [LangChain](https://www.langchain.com/) and [LangGraph](https://langchain-ai.github.io/langgraph/tutorials/introduction/)
-- **Database**: [ChromaDB](https://www.trychroma.com/)
+- **Database**: [Qdrant](https://qdrant.tech/)
 - **Models**:
   - Embeddings: [Google Gemini API (embedding-001)](https://ai.google.dev/gemini-api/docs/embeddings)
   - Chat: [Google Gemini API (gemini-1.5-pro)](https://ai.google.dev/gemini-api/docs/models/gemini#gemini-1.5-pro)
