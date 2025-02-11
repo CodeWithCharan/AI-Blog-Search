@@ -1,11 +1,14 @@
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_chroma import Chroma
+from langchain_qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
+from uuid import uuid4
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.tools.retriever import create_retriever_tool
 
 from typing import Annotated, Literal, Sequence
 from typing_extensions import TypedDict
+from functools import partial
 
 from langchain import hub
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -20,50 +23,68 @@ from langgraph.graph import END, StateGraph, START
 from langgraph.prebuilt import ToolNode, tools_condition
 
 import streamlit as st
-import os
 
-os.environ['USER_AGENT'] = 'myagent'
+st.set_page_config(page_title="AI Blog Search", page_icon=":mag_right:")
+st.header(":blue[Agentic RAG with LangGraph:] :green[AI Blog Search]")
 
-# Initialize embedding model
-embedding_model = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+# Initialize session state variables if they don't exist
+if 'qdrant_host' not in st.session_state:
+    st.session_state.qdrant_host = ""
+if 'qdrant_api_key' not in st.session_state:
+    st.session_state.qdrant_api_key = ""
+if 'gemini_api_key' not in st.session_state:
+    st.session_state.gemini_api_key = ""
 
-# Initialize pharma database
-db = Chroma(collection_name="rag-chroma",
-            embedding_function=embedding_model,
-            persist_directory='./chroma_db')
+def set_sidebar():
+    """Setup sidebar for API keys and configuration."""
+    with st.sidebar:
+        st.subheader("API Configuration")
+        
+        qdrant_host = st.text_input("Enter your Qdrant Host URL:", type="password")
+        qdrant_api_key = st.text_input("Enter your Qdrant API key:", type="password")
+        gemini_api_key = st.text_input("Enter your Gemini API key:", type="password")
 
-# Create a Retriever Object and apply Similarity Search
-retriever = db.as_retriever(search_type="similarity", search_kwargs={'k': 5})
+        if st.button("Done"):
+            if qdrant_host and qdrant_api_key and gemini_api_key:
+                st.session_state.qdrant_host = qdrant_host
+                st.session_state.qdrant_api_key = qdrant_api_key
+                st.session_state.gemini_api_key = gemini_api_key
+                st.success("API keys saved!")
+            else:
+                st.warning("Please fill all API fields")
 
-# Create a Retriever tool
-retriever_tool = create_retriever_tool(
-    retriever,
-    "retrieve_blog_posts",
-    "Search and return information about blog posts on LLMs, LLM agents, prompt engineering, and adversarial attacks on LLMs.",
-)
+def initialize_components():
+    """Initialize components that require API keys"""
+    if not all([st.session_state.qdrant_host, 
+               st.session_state.qdrant_api_key, 
+               st.session_state.gemini_api_key]):
+        return None, None, None
 
-tools = [retriever_tool]
-
-def add_documents_to_chromadb(url):
     try:
-        # fetch the url and load the docs
-        docs = WebBaseLoader(url).load()
+        # Initialize embedding model with API key
+        embedding_model = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=st.session_state.gemini_api_key
+        )
 
-        # Split documents into smaller chunks
-        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-            chunk_size=100, chunk_overlap=50
-            )
+        # Initialize Qdrant client
+        client = QdrantClient(
+            st.session_state.qdrant_host,
+            api_key=st.session_state.qdrant_api_key
+        )
 
-        doc_chunks = text_splitter.split_documents(docs)
+        # Initialize vector store
+        db = QdrantVectorStore(
+            client=client,
+            collection_name="qdrant_db",
+            embedding=embedding_model
+        )
 
-        # Add chunks to database
-        db.add_documents(doc_chunks)
-
-        return "Success"
-    
+        return embedding_model, client, db
+        
     except Exception as e:
-        print("Error:", e)
-        return None
+        st.error(f"Initialization error: {str(e)}")
+        return None, None, None
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -90,7 +111,7 @@ def grade_documents(state) -> Literal["generate", "rewrite"]:
         binary_score: str = Field(description="Relevance score 'yes' or 'no'")
 
     # LLM
-    model = ChatGoogleGenerativeAI(temperature=0, model="gemini-1.5-pro", streaming=True)
+    model = ChatGoogleGenerativeAI(api_key=st.session_state.gemini_api_key, temperature=0, model="gemini-1.5-pro", streaming=True)
 
     # LLM with tool and validation
     llm_with_tool = model.with_structured_output(grade)
@@ -129,7 +150,7 @@ def grade_documents(state) -> Literal["generate", "rewrite"]:
     
 # Nodes
 ## agent node
-def agent(state):
+def agent(state, tools):
     """
     Invokes the agent model to generate a response based on the current state. Given
     the question, it will decide to retrieve using the retriever tool, or simply end.
@@ -142,7 +163,7 @@ def agent(state):
     """
     print("---CALL AGENT---")
     messages = state["messages"]
-    model = ChatGoogleGenerativeAI(temperature=0, streaming=True, model="gemini-1.5-pro")
+    model = ChatGoogleGenerativeAI(api_key=st.session_state.gemini_api_key, temperature=0, streaming=True, model="gemini-1.5-pro")
     model = model.bind_tools(tools)
     response = model.invoke(messages)
     
@@ -178,7 +199,7 @@ def rewrite(state):
     ]
 
     # Grader
-    model = ChatGoogleGenerativeAI(temperature=0, model="gemini-1.5-pro", streaming=True)
+    model = ChatGoogleGenerativeAI(api_key=st.session_state.gemini_api_key, temperature=0, model="gemini-1.5-pro", streaming=True)
     response = model.invoke(msg)
     return {"messages": [response]}
 
@@ -204,7 +225,7 @@ def generate(state):
     prompt_template = hub.pull("rlm/rag-prompt")
 
     # Initialize a Generator (i.e. Chat Model)
-    chat_model = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0, streaming=True)
+    chat_model = ChatGoogleGenerativeAI(api_key=st.session_state.gemini_api_key, model="gemini-1.5-pro", temperature=0, streaming=True)
 
     # Initialize a Output Parser
     output_parser = StrOutputParser()
@@ -218,13 +239,17 @@ def generate(state):
 
 # graph function
 def get_graph(retriever_tool):
+    tools = [retriever_tool]  # Create tools list here
+    
     # Define a new graph
     workflow = StateGraph(AgentState)
 
-    # Define the nodes we will cycle between
-    workflow.add_node("agent", agent)  # agent
-    retrieve = ToolNode([retriever_tool])
-    workflow.add_node("retrieve", retrieve)  # retrieval
+    # Use partial to pass tools to the agent function
+    workflow.add_node("agent", partial(agent, tools=tools))
+    
+    # Rest of the graph setup remains the same
+    retrieve = ToolNode(tools)
+    workflow.add_node("retrieve", retrieve)
     workflow.add_node("rewrite", rewrite)  # Re-writing the question
     workflow.add_node(
         "generate", generate
@@ -268,62 +293,78 @@ def generate_message(graph, inputs):
     
     return generated_message
 
+def add_documents_to_qdrant(url, db):
+    try:
+        docs = WebBaseLoader(url).load()
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=100, chunk_overlap=50
+        )
+        doc_chunks = text_splitter.split_documents(docs)
+        uuids = [str(uuid4()) for _ in range(len(doc_chunks))]
+        db.add_documents(documents=doc_chunks, ids=uuids)
+        return True
+    except Exception as e:
+        st.error(f"Error adding documents: {str(e)}")
+        return False
+
 def main():
-    st.set_page_config(page_title="AI Blog Search", page_icon=":mag_right:")
-    st.header(":blue[Agentic RAG with LangGraph:] :green[AI Blog Search]")
+    set_sidebar()
 
-    # Sidebar for Graph Visualization
-    with st.sidebar:
-        graph_image_path = "Images/LangGraph-Workflow.png"
-        st.image(graph_image_path, caption="LangGraph Workflow", use_container_width=True)
+    # Check if API keys are set
+    if not all([st.session_state.qdrant_host, 
+                st.session_state.qdrant_api_key, 
+                st.session_state.gemini_api_key]):
+        st.warning("Please configure your API keys in the sidebar first")
+        return
 
-        gemini_api_key = st.text_input("Enter your Gemini API key:", type="password")
+    # Initialize components
+    embedding_model, client, db = initialize_components()
+    if not all([embedding_model, client, db]):
+        return
 
-        if st.button("Done"):
-            if gemini_api_key:
-                st.session_state.gemini_api_key = gemini_api_key
-                st.success("API key saved!")
+    # Initialize retriever and tools
+    retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+    retriever_tool = create_retriever_tool(
+        retriever,
+        "retrieve_blog_posts",
+        "Search and return information about blog posts on LLMs, LLM agents, prompt engineering, and adversarial attacks on LLMs.",
+    )
+    tools = [retriever_tool]
 
-            else:
-                st.warning("Please enter your Gemini API key to proceed.")
-
-    # Link section
+    # URL input section
     url = st.text_input(
         ":link: Paste the blog link:",
         placeholder="e.g., https://lilianweng.github.io/posts/2023-06-23-agent/"
     )
-
-    if st.button("Enter"):
+    if st.button("Enter URL"):
         if url:
-            with st.spinner("fetching documents..."):
-                add_documents_to_chromadb(url)
-                st.success("Done!")
+            with st.spinner("Processing documents..."):
+                if add_documents_to_qdrant(url, db):
+                    st.success("Documents added successfully!")
+                else:
+                    st.error("Failed to add documents")
         else:
-            st.warning("Please paste the url")
+            st.warning("Please enter a URL")
 
-    # graph section
+    # Query section
     graph = get_graph(retriever_tool)
-
-    # generate messages section
     query = st.text_area(
         ":bulb: Enter your query about the blog post:",
         placeholder="e.g., What does Lilian Weng say about the types of agent memory?"
     )
 
-    inputs = {
-        "messages": [
-            ("user", query),
-        ]
-    }
-
-    if st.button("Submit", type="primary"):
+    if st.button("Submit Query"):
         if not query:
-            st.warning("Please ask a question")
-        
-        else:
-            with st.spinner("Thinking..."):
+            st.warning("Please enter a query")
+            return
+
+        inputs = {"messages": [HumanMessage(content=query)]}
+        with st.spinner("Generating response..."):
+            try:
                 response = generate_message(graph, inputs)
                 st.write(response)
+            except Exception as e:
+                st.error(f"Error generating response: {str(e)}")
 
     st.markdown("---")
     st.write("Built with :blue-background[LangChain] | :blue-background[LangGraph] by [Charan](https://www.linkedin.com/in/codewithcharan/)")
