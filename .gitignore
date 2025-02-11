@@ -171,3 +171,4 @@ cython_debug/
 .pypirc
 chroma_db/
 .virtual_documents/
+test.py
